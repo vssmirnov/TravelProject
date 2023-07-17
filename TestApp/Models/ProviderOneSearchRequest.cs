@@ -31,5 +31,17 @@
         /// Maximum price of route
         /// </summary>
         public decimal? MaxPrice { get; set; }
+        
+        public static ProviderOneSearchRequest FromSearchRequest(SearchRequest request)
+        {
+            return new ProviderOneSearchRequest
+            {
+                From = request.Origin,
+                To = request.Destination,
+                DateFrom = request.OriginDateTime,
+                DateTo = request.Filters?.DestinationDateTime,
+                MaxPrice = request.Filters?.MaxPrice
+            };
+        }
     }
 }

@@ -42,9 +42,9 @@ namespace TestApp.Services
                     return true;
                 }
             }
-            catch
+            catch(Exception ex)
             {
-                // ignored
+                Console.WriteLine(ex.ToString());
             }
 
             return false;

@@ -1,29 +1,40 @@
-﻿using System.Collections.Concurrent;
+﻿using System.Runtime.Caching;
+using TestApp.Models;
 using Route = TestApp.Models.Route;
+using MemoryCache = System.Runtime.Caching.MemoryCache;
 
 namespace TestApp.Caching
 {
     public class MemoryRouteCache : IRouteCache
     {
-        private readonly ConcurrentDictionary<Guid, Route> _routes;
+        private readonly ObjectCache _cache;
+        private readonly CacheItemPolicy _policy;
 
-        public MemoryRouteCache()
+        public MemoryRouteCache(TimeSpan ttl)
         {
-            _routes = new ConcurrentDictionary<Guid, Route>();
-        }
+            _cache = MemoryCache.Default;
 
-        public List<Route> GetRoutes()
-        {
-            return _routes.Values.ToList();
-        }
-
-        public void AddRoutes(List<Route>? routes)
-        {
-            if (routes == null) return;
-            foreach (var route in routes)
+            _policy = new CacheItemPolicy
             {
-                _routes.AddOrUpdate(route.Id, route, (_, __) => route);
-            }
+                SlidingExpiration = ttl
+            };
+        }
+
+        public List<Route> GetRoutes(SearchRequest request)
+        {
+            var cacheKey = GetCacheKey(request);
+            return _cache.Get(cacheKey) as List<Route>;
+        }
+
+        public void AddRoutes(SearchRequest request, List<Route> routes)
+        {
+            var cacheKey = GetCacheKey(request);
+            _cache.Add(cacheKey, routes, _policy);
+        }
+
+        private string GetCacheKey(SearchRequest request)
+        {
+            return $"{request.Origin}-{request.Destination}-{request.OriginDateTime:yyyy-MM-dd}";
         }
     }
 }

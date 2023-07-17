@@ -487,15 +487,18 @@ namespace TestApp.Tests.Services
                 }
             };
 
-            _cacheMock.Setup(c => c.GetRoutes()).Returns(routes);
-
-            var filters = new SearchFilters()
+            var searchRequest = new SearchRequest()
             {
-                OnlyCached = true
+                Origin = _cityA,
+                Destination = _cityB,
+                OriginDateTime = new DateTime(2022, 6, 1, 8, 0, 0),
+                Filters = new SearchFilters() { OnlyCached = true }
             };
 
+            _cacheMock.Setup(c => c.GetRoutes(It.Is<SearchRequest>(r => r.Origin == _cityA && r.Destination == _cityB && r.OriginDateTime == new DateTime(2022, 6, 1, 8, 0, 0)))).Returns(routes);
+
             // Act
-            var result = await _searchService.SearchAsync(new SearchRequest() { Filters = filters }, CancellationToken.None);
+            var result = await _searchService.SearchAsync(searchRequest, CancellationToken.None);
 
             // Assert
             Assert.Equal(2, result.Routes.Length);
@@ -504,5 +507,6 @@ namespace TestApp.Tests.Services
             Assert.Equal(_cityB, result.Routes[1].Origin);
             Assert.Equal(_cityA, result.Routes[1].Destination);
         }
+
     }
 }

@@ -23,52 +23,58 @@ namespace TestApp.Services
         public async Task<SearchResponse> SearchAsync(SearchRequest request, CancellationToken cancellationToken)
         {
             // Check if both providers are available
-            var providerOneIsAvailable = await _providerOneSearchService.IsAvailableAsync(cancellationToken);
-            var providerTwoIsAvailable = await _providerTwoSearchService.IsAvailableAsync(cancellationToken);
+            var providerOneAvailabilityTask = _providerOneSearchService.IsAvailableAsync(cancellationToken);
+            var providerTwoAvailabilityTask = _providerTwoSearchService.IsAvailableAsync(cancellationToken);
+
+            await Task.WhenAll(providerOneAvailabilityTask, providerTwoAvailabilityTask);
+
+            var providerOneIsAvailable = providerOneAvailabilityTask.Result;
+            var providerTwoIsAvailable = providerTwoAvailabilityTask.Result;
 
             if (!providerOneIsAvailable && !providerTwoIsAvailable && request.Filters?.OnlyCached != true)
                 throw new ServiceUnavailableException("Both providers are unavailable");
 
-            // Search routes from provider one
             ProviderOneSearchResponse providerOneResponse = null!;
-            if (providerOneIsAvailable)
-            {
-                var providerOneRequest = new ProviderOneSearchRequest
-                {
-                    From = request.Origin,
-                    To = request.Destination,
-                    DateFrom = request.OriginDateTime,
-                    DateTo = request.Filters?.DestinationDateTime,
-                    MaxPrice = request.Filters?.MaxPrice
-                };
+            ProviderTwoSearchResponse providerTwoResponse = null!;
 
-                providerOneResponse =
-                    await _providerOneSearchService.SearchAsync(providerOneRequest, cancellationToken);
+            var providerOneSearchTask = Task.FromResult<ProviderOneSearchResponse>(null!);
+            var providerTwoSearchTask = Task.FromResult<ProviderTwoSearchResponse>(null!);
+
+            var shouldSearch = request.Filters == null || request.Filters.OnlyCached.GetValueOrDefault(true);
+
+            // Search routes from provider one
+            if (providerOneIsAvailable && shouldSearch)
+            {
+                var providerOneRequest = ProviderOneSearchRequest.FromSearchRequest(request);
+                providerOneSearchTask = _providerOneSearchService.SearchAsync(providerOneRequest, cancellationToken);
             }
 
             // Search routes from provider two
-            ProviderTwoSearchResponse providerTwoResponse = null!;
+            if (providerTwoIsAvailable && shouldSearch)
+            {
+                var providerTwoRequest = ProviderTwoSearchRequest.FromSearchRequest(request);
+                providerTwoSearchTask = _providerTwoSearchService.SearchAsync(providerTwoRequest, cancellationToken);
+            }
+
+            await Task.WhenAll(providerOneSearchTask, providerTwoSearchTask);
+
+            if (providerOneIsAvailable)
+            {
+                providerOneResponse = await providerOneSearchTask;
+            }
+
             if (providerTwoIsAvailable)
             {
-                var providerTwoRequest = new ProviderTwoSearchRequest
-                {
-                    Departure = request.Origin,
-                    Arrival = request.Destination,
-                    DepartureDate = request.OriginDateTime,
-                    MinTimeLimit = request.Filters?.MinTimeLimit
-                };
-
-                providerTwoResponse =
-                    await _providerTwoSearchService.SearchAsync(providerTwoRequest, cancellationToken);
+                providerTwoResponse = await providerTwoSearchTask;
             }
 
             // Merge and filter routes from both providers
             var mergedRoutes = MergeRoutes(providerOneResponse?.Routes ?? new ProviderOneRoute[]{},
-                providerTwoResponse?.Routes ?? new ProviderTwoRoute[]{}, request.Filters?.OnlyCached ?? false);
+                providerTwoResponse?.Routes ?? new ProviderTwoRoute[]{}, request);
             var filteredRoutes = FilterRoutes(mergedRoutes, request.Filters);
 
             // Add routes to cache
-            _routeCache.AddRoutes(filteredRoutes);
+            _routeCache.AddRoutes(request, filteredRoutes);
 
             // Get cheapest and fastest routes
             var cheapestRoute = filteredRoutes.MinBy(r => r.Price);
@@ -90,12 +96,12 @@ namespace TestApp.Services
         }
 
         private List<Route> MergeRoutes(ProviderOneRoute[] providerOneRoutes,
-            ProviderTwoRoute[] providerTwoRoutes, bool filtersOnlyCached)
+            ProviderTwoRoute[] providerTwoRoutes, SearchRequest searchRequest)
         {
             var mergedRoutes = new List<Route>();
 
-            if (filtersOnlyCached)
-                return _routeCache.GetRoutes();
+            if (searchRequest.Filters != null && searchRequest.Filters.OnlyCached.GetValueOrDefault(false))
+                return _routeCache.GetRoutes(searchRequest);
 
             // Add routes from provider one
             if (providerOneRoutes != null)

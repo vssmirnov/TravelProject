@@ -1,14 +1,14 @@
-﻿using Route = TestApp.Models.Route;
+﻿using TestApp.Models;
 
 namespace TestApp.Caching
 {
     // This interface defines the contract for a cache of routes.
     public interface IRouteCache
     {
-        // Gets all routes stored in the cache.
-        List<Route> GetRoutes();
+        // Gets routes from the cache based on a search request.
+        List<Models.Route> GetRoutes(SearchRequest request);
 
         // Adds a list of routes to the cache.
-        void AddRoutes(List<Route>? routes);
+        void AddRoutes(SearchRequest request, List<Models.Route> filteredRoutes);
     }
 }

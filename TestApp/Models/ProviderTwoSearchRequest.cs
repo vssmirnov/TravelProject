@@ -25,5 +25,17 @@
         /// Minimum value of timelimit for route
         /// </summary>
         public DateTime? MinTimeLimit { get; set; }
+
+        public static ProviderTwoSearchRequest FromSearchRequest(SearchRequest request)
+        {
+            return new ProviderTwoSearchRequest
+            {
+                Departure = request.Origin,
+                Arrival = request.Destination,
+                DepartureDate = request.OriginDateTime,
+                MinTimeLimit = request.Filters?.MinTimeLimit
+            };
+        }
     }
 }
+    
